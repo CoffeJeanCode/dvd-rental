@@ -1,0 +1,83 @@
+SET client_encoding = 'UTF8';
+SET
+--- Antes del cierre
+SELECT k.codigo, m.estado, count(*) FROM campana.mensaje m JOIN campana.campana k USING (campana_id)
+GROUP BY 1,2 ORDER BY 1,2;
+        codigo         |  estado   | count 
+-----------------------+-----------+-------
+ HALLOWEEN-2026        | CANCELADO |     3
+ HALLOWEEN-2026        | PENDIENTE |    23
+ HALLOWEEN-2026-FIELES | PENDIENTE |     2
+
+CALL campana.sp_cerrar_campana('HALLOWEEN-2026-FIELES', 'director.marketing');
+CALL
+CALL campana.sp_cerrar_campana('HALLOWEEN-2026', 'director.marketing');
+CALL
+--- Después del cierre: todos los pendientes cancelados
+SELECT k.codigo, k.estado AS estado_campana, k.cerrada_por, m.estado, m.motivo_cancelacion, count(*)
+FROM campana.mensaje m JOIN campana.campana k USING (campana_id)
+GROUP BY 1,2,3,4,5 ORDER BY 1,4,5;
+        codigo         | estado_campana |    cerrada_por     |  estado   |                 motivo_cancelacion                  | count 
+-----------------------+----------------+--------------------+-----------+-----------------------------------------------------+-------
+ HALLOWEEN-2026        | CERRADA        | director.marketing | CANCELADO | Autorización retirada (EMAIL)                       |     1
+ HALLOWEEN-2026        | CERRADA        | director.marketing | CANCELADO | Cierre de la campaña HALLOWEEN-2026                 |    23
+ HALLOWEEN-2026        | CERRADA        | director.marketing | CANCELADO | Verificación retirada; Cambio de destino (WHATSAPP) |     1
+ HALLOWEEN-2026        | CERRADA        | director.marketing | CANCELADO | Verificación retirada (EMAIL)                       |     1
+ HALLOWEEN-2026-FIELES | CERRADA        | director.marketing | CANCELADO | Cierre de la campaña HALLOWEEN-2026-FIELES          |     2
+
+SELECT count(*) AS lista_despacho_restante FROM campana.v_despacho;
+ lista_despacho_restante 
+-------------------------
+                       0
+
+--- Intentos posteriores (todos deben fallar)
+UPDATE campana.campana SET estado = 'HABILITADA' WHERE codigo = 'HALLOWEEN-2026';
+psql:/workspaces/campana_halloween/sql/11_cierre.sql:22: ERROR:  La campaña HALLOWEEN-2026 está CERRADA: no admite cambios ni reapertura
+UPDATE campana.campana SET nombre = 'Otro nombre' WHERE codigo = 'HALLOWEEN-2026';
+psql:/workspaces/campana_halloween/sql/11_cierre.sql:23: ERROR:  La campaña HALLOWEEN-2026 está CERRADA: no admite cambios ni reapertura
+CALL campana.sp_preparar_campana('HALLOWEEN-2026', ARRAY[3]);
+psql:/workspaces/campana_halloween/sql/11_cierre.sql:24: ERROR:  La campaña HALLOWEEN-2026 está en estado CERRADA; solo se preparan destinatarios en campañas HABILITADAS
+CALL campana.sp_cerrar_campana('HALLOWEEN-2026');
+psql:/workspaces/campana_halloween/sql/11_cierre.sql:25: ERROR:  La campaña HALLOWEEN-2026 está CERRADA: no admite cambios ni reapertura
+DELETE FROM campana.campana WHERE codigo = 'HALLOWEEN-2026';
+psql:/workspaces/campana_halloween/sql/11_cierre.sql:26: ERROR:  No se puede eliminar la campaña HALLOWEEN-2026 en estado CERRADA
+--- Evidencia de auditoría del cierre
+SELECT auditoria_id, to_char(ocurrido_en, 'YYYY-MM-DD HH24:MI:SS') AS ocurrido_en, actor, tabla, clave, evento, motivo_cancelacion
+FROM campana.v_auditoria WHERE actor = 'director.marketing' ORDER BY auditoria_id;
+ auditoria_id |     ocurrido_en     |       actor        |  tabla  |                     clave                     |            evento            |             motivo_cancelacion             
+--------------+---------------------+--------------------+---------+-----------------------------------------------+------------------------------+--------------------------------------------
+           89 | 2026-11-11 20:42:54 | director.marketing | campana | campana_id=4, codigo=HALLOWEEN-2026-FIELES    | CAMPANA_HABILITADA_A_CERRADA | 
+           90 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=43, customer_id=12, canal=EMAIL    | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026-FIELES
+           91 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=44, customer_id=18, canal=EMAIL    | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026-FIELES
+           92 | 2026-11-11 20:42:54 | director.marketing | campana | campana_id=1, codigo=HALLOWEEN-2026           | CAMPANA_HABILITADA_A_CERRADA | 
+           93 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=1, customer_id=1, canal=EMAIL      | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+           94 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=2, customer_id=1, canal=WHATSAPP   | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+           95 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=3, customer_id=3, canal=EMAIL      | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+           96 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=4, customer_id=3, canal=WHATSAPP   | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+           97 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=5, customer_id=4, canal=EMAIL      | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+           98 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=6, customer_id=5, canal=WHATSAPP   | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+           99 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=17, customer_id=9, canal=WHATSAPP  | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          100 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=18, customer_id=10, canal=EMAIL    | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          101 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=21, customer_id=11, canal=WHATSAPP | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          102 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=45, customer_id=12, canal=EMAIL    | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          103 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=46, customer_id=12, canal=WHATSAPP | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          104 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=47, customer_id=13, canal=EMAIL    | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          105 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=48, customer_id=13, canal=WHATSAPP | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          106 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=49, customer_id=14, canal=EMAIL    | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          107 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=50, customer_id=14, canal=WHATSAPP | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          108 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=55, customer_id=15, canal=EMAIL    | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          109 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=56, customer_id=15, canal=WHATSAPP | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          110 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=37, customer_id=17, canal=EMAIL    | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          111 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=38, customer_id=17, canal=WHATSAPP | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          112 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=39, customer_id=18, canal=EMAIL    | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          113 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=40, customer_id=18, canal=WHATSAPP | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          114 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=41, customer_id=19, canal=EMAIL    | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+          115 | 2026-11-11 20:42:54 | director.marketing | mensaje | mensaje_id=42, customer_id=19, canal=WHATSAPP | MENSAJE_CANCELADO            | Cierre de la campaña HALLOWEEN-2026
+
+--- El modelo original no fue alterado (conteos de public)
+SELECT (SELECT count(*) FROM public.customer) AS customer, (SELECT count(*) FROM public.rental) AS rental,
+       (SELECT count(*) FROM public.film_category) AS film_category, (SELECT count(*) FROM public.category) AS category;
+ customer | rental | film_category | category 
+----------+--------+---------------+----------
+      599 |  16044 |          1000 |       16
+

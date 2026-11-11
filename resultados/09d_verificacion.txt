@@ -1,0 +1,47 @@
+--- Lotes de las sesiones A y B
+SELECT lote_id, actor, sesion_pid, ejecutado_en, n_clientes_distintos, n_mensajes_nuevos,
+       n_mensajes_ya_preparados, n_decisiones, conciliado
+FROM campana.v_resumen_lote WHERE actor IN ('sesion.A','sesion.B') ORDER BY lote_id;
+ lote_id |  actor   | sesion_pid |         ejecutado_en          | n_clientes_distintos | n_mensajes_nuevos | n_mensajes_ya_preparados | n_decisiones | conciliado 
+---------+----------+------------+-------------------------------+----------------------+-------------------+--------------------------+--------------+------------
+      11 | sesion.A |        132 | 2026-11-11 20:42:48.15188+00  |                    3 |                 6 |                        0 |            6 | t
+      12 | sesion.B |        131 | 2026-11-11 20:42:50.138248+00 |                    3 |                 2 |                        4 |            6 | t
+
+--- Decisiones de cada sesión
+SELECT d.lote_id, l.actor, d.customer_id, d.canal, d.motivo, d.mensaje_id
+FROM campana.decision d JOIN campana.lote l USING (lote_id)
+WHERE l.actor IN ('sesion.A','sesion.B') ORDER BY d.lote_id, d.customer_id, d.canal;
+ lote_id |  actor   | customer_id |  canal   |     motivo      | mensaje_id 
+---------+----------+-------------+----------+-----------------+------------
+      11 | sesion.A |          12 | EMAIL    | PREPARADO_NUEVO |         45
+      11 | sesion.A |          12 | WHATSAPP | PREPARADO_NUEVO |         46
+      11 | sesion.A |          13 | EMAIL    | PREPARADO_NUEVO |         47
+      11 | sesion.A |          13 | WHATSAPP | PREPARADO_NUEVO |         48
+      11 | sesion.A |          14 | EMAIL    | PREPARADO_NUEVO |         49
+      11 | sesion.A |          14 | WHATSAPP | PREPARADO_NUEVO |         50
+      12 | sesion.B |          13 | EMAIL    | YA_PREPARADO    |         47
+      12 | sesion.B |          13 | WHATSAPP | YA_PREPARADO    |         48
+      12 | sesion.B |          14 | EMAIL    | YA_PREPARADO    |         49
+      12 | sesion.B |          14 | WHATSAPP | YA_PREPARADO    |         50
+      12 | sesion.B |          15 | EMAIL    | PREPARADO_NUEVO |         55
+      12 | sesion.B |          15 | WHATSAPP | PREPARADO_NUEVO |         56
+
+--- Mensajes de 12..15 (uno por cliente y canal, creados por A o B)
+SELECT m.mensaje_id, m.customer_id, m.canal, m.estado, m.creado_por, m.lote_id
+FROM campana.mensaje m WHERE m.campana_id = 1 AND m.customer_id BETWEEN 12 AND 15 ORDER BY 2,3;
+ mensaje_id | customer_id |  canal   |  estado   | creado_por | lote_id 
+------------+-------------+----------+-----------+------------+---------
+         45 |          12 | EMAIL    | PENDIENTE | sesion.A   |      11
+         46 |          12 | WHATSAPP | PENDIENTE | sesion.A   |      11
+         47 |          13 | EMAIL    | PENDIENTE | sesion.A   |      11
+         48 |          13 | WHATSAPP | PENDIENTE | sesion.A   |      11
+         49 |          14 | EMAIL    | PENDIENTE | sesion.A   |      11
+         50 |          14 | WHATSAPP | PENDIENTE | sesion.A   |      11
+         55 |          15 | EMAIL    | PENDIENTE | sesion.B   |      12
+         56 |          15 | WHATSAPP | PENDIENTE | sesion.B   |      12
+
+--- Duplicados en toda la tabla (debe dar 0 filas)
+SELECT campana_id, customer_id, canal, count(*) FROM campana.mensaje GROUP BY 1,2,3 HAVING count(*) > 1;
+ campana_id | customer_id | canal | count 
+------------+-------------+-------+-------
+

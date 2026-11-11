@@ -1,0 +1,54 @@
+SET client_encoding = 'UTF8';
+SET
+SELECT set_config('campana.actor', 'marketing.config', false);
+    set_config    
+------------------
+ marketing.config
+(1 row)
+
+INSERT INTO campana.campana (codigo, nombre, hist_desde, hist_hasta, vig_desde, vig_hasta, min_alquileres)
+VALUES ('HALLOWEEN-2026', 'Halloween en DVD Rental',
+        '2005-05-01 00:00:00', '2006-03-01 00:00:00', DATE '2026-10-15', DATE '2026-12-01', 1);
+INSERT 0 1
+INSERT INTO campana.campana_oferta (campana_id, orden, titulo)
+SELECT campana_id, o.orden, o.titulo
+FROM campana.campana,
+     (VALUES (1, 'Colony: Zona Cero'), (2, 'The Others')) AS o(orden, titulo)
+WHERE codigo = 'HALLOWEEN-2026';
+INSERT 0 2
+INSERT INTO campana.campana_categoria (campana_id, category_id, rol, justificacion)
+SELECT k.campana_id, c.category_id, x.rol, x.justificacion
+FROM campana.campana k
+JOIN (VALUES
+  ('Horror', 'PRINCIPAL',
+   'Categoría de terror del catálogo DVD Rental (category.name = Horror). Ambos títulos promocionales tienen Terror como género principal.'),
+  ('Sci-Fi', 'RELACIONADA',
+   'Colony: Zona Cero es terror de ciencia ficción (virus de mutación biotecnológica e infectados). El público de Sci-Fi comparte el subgénero de horror científico. Es la única categoría del catálogo con ese vínculo temático directo.')
+) AS x(nombre, rol, justificacion) ON true
+JOIN public.category c ON c.name = x.nombre
+WHERE k.codigo = 'HALLOWEEN-2026';
+INSERT 0 2
+CALL campana.sp_habilitar_campana('HALLOWEEN-2026', 'marketing.config');
+CALL
+SELECT codigo, nombre, estado, hist_desde, hist_hasta, vig_desde, vig_hasta, min_alquileres, habilitada_por
+FROM campana.campana;
+     codigo     |         nombre          |   estado   |     hist_desde      |     hist_hasta      | vig_desde  | vig_hasta  | min_alquileres |  habilitada_por  
+----------------+-------------------------+------------+---------------------+---------------------+------------+------------+----------------+------------------
+ HALLOWEEN-2026 | Halloween en DVD Rental | HABILITADA | 2005-05-01 00:00:00 | 2006-03-01 00:00:00 | 2026-10-15 | 2026-12-01 |              1 | marketing.config
+(1 row)
+
+SELECT o.orden, o.titulo FROM campana.campana_oferta o ORDER BY o.orden;
+ orden |      titulo       
+-------+-------------------
+     1 | Colony: Zona Cero
+     2 | The Others
+(2 rows)
+
+SELECT cc.category_id, c.name, cc.rol, cc.justificacion
+FROM campana.campana_categoria cc JOIN public.category c USING (category_id) ORDER BY cc.rol, c.name;
+ category_id |  name  |     rol     |                                                                                                             justificacion                                                                                                             
+-------------+--------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+          11 | Horror | PRINCIPAL   | Categoría de terror del catálogo DVD Rental (category.name = Horror). Ambos títulos promocionales tienen Terror como género principal.
+          14 | Sci-Fi | RELACIONADA | Colony: Zona Cero es terror de ciencia ficción (virus de mutación biotecnológica e infectados). El público de Sci-Fi comparte el subgénero de horror científico. Es la única categoría del catálogo con ese vínculo temático directo.
+(2 rows)
+

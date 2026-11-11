@@ -1,0 +1,69 @@
+-- =====================================================================
+-- 05_vistas.sql  -  Consultas de resultados, trazabilidad y conciliación
+-- =====================================================================
+SET client_encoding = 'UTF8';
+
+-- 1. Destinatarios preparados (todos los estados)
+CREATE OR REPLACE VIEW campana.v_destinatarios AS
+SELECT m.mensaje_id, k.codigo AS campana, m.customer_id,
+       initcap(c.first_name || ' ' || c.last_name) AS cliente,
+       m.canal, m.destino, m.es_prueba, m.estado, m.asunto, m.cuerpo,
+       m.lote_id, m.creado_en, m.creado_por, m.motivo_cancelacion, m.cancelado_en, m.cancelado_por
+FROM campana.mensaje m
+JOIN campana.campana k  ON k.campana_id = m.campana_id
+JOIN public.customer c  ON c.customer_id = m.customer_id;
+
+-- 2. Lista lista para despacho, diferenciada por canal (solo PENDIENTES de campañas habilitadas)
+CREATE OR REPLACE VIEW campana.v_despacho AS
+SELECT d.campana, d.canal, d.customer_id, d.cliente, d.destino, d.es_prueba, d.asunto, d.cuerpo, d.mensaje_id
+FROM campana.v_destinatarios d
+JOIN campana.campana k ON k.codigo = d.campana
+WHERE d.estado = 'PENDIENTE' AND k.estado = 'HABILITADA';
+
+-- 3. Decisiones con motivo legible
+CREATE OR REPLACE VIEW campana.v_decisiones AS
+SELECT d.lote_id, k.codigo AS campana, d.customer_id,
+       coalesce(initcap(c.first_name || ' ' || c.last_name), '(no existe)') AS cliente,
+       d.canal, d.resultado, d.motivo, mo.descripcion AS descripcion_motivo, d.detalle,
+       d.alquileres_aprobados, d.mensaje_id, d.registrado_en
+FROM campana.decision d
+JOIN campana.campana k  ON k.campana_id = d.campana_id
+JOIN campana.motivo mo  ON mo.codigo = d.motivo
+LEFT JOIN public.customer c ON c.customer_id = d.customer_id;
+
+-- 4. Resumen de cada ejecución con conciliación automática
+CREATE OR REPLACE VIEW campana.v_resumen_lote AS
+SELECT l.lote_id, k.codigo AS campana, l.ejecutado_en, l.actor, l.sesion_pid,
+       l.n_ids_recibidos, l.n_clientes_distintos, l.canales_solicitados, l.n_clientes_segmento,
+       l.n_mensajes_nuevos, l.n_mensajes_ya_preparados, l.n_decisiones, l.n_exclusiones, l.estado,
+       x.decisiones_tabla, x.mensajes_del_lote,
+       (    l.n_decisiones = x.decisiones_tabla
+        AND l.n_decisiones = l.n_clientes_distintos * cardinality(l.canales_solicitados)
+        AND l.n_decisiones = l.n_mensajes_nuevos + l.n_mensajes_ya_preparados + l.n_exclusiones
+        AND l.n_mensajes_nuevos = x.mensajes_del_lote
+        AND l.n_mensajes_nuevos = x.dec_nuevos
+        AND l.n_mensajes_ya_preparados = x.dec_previos) AS conciliado
+FROM campana.lote l
+JOIN campana.campana k ON k.campana_id = l.campana_id
+CROSS JOIN LATERAL (
+    SELECT (SELECT count(*) FROM campana.decision d WHERE d.lote_id = l.lote_id)                                    AS decisiones_tabla,
+           (SELECT count(*) FROM campana.decision d WHERE d.lote_id = l.lote_id AND d.motivo = 'PREPARADO_NUEVO')   AS dec_nuevos,
+           (SELECT count(*) FROM campana.decision d WHERE d.lote_id = l.lote_id AND d.motivo = 'YA_PREPARADO')      AS dec_previos,
+           (SELECT count(*) FROM campana.mensaje  m WHERE m.lote_id = l.lote_id)                                    AS mensajes_del_lote
+) x;
+
+-- 5. Auditoría legible
+CREATE OR REPLACE VIEW campana.v_auditoria AS
+SELECT auditoria_id, ocurrido_en, actor, usuario_bd, tabla, operacion, clave, evento,
+       antes ->> 'estado' AS estado_antes, despues ->> 'estado' AS estado_despues,
+       coalesce(despues ->> 'motivo_cancelacion', '') AS motivo_cancelacion
+FROM campana.auditoria;
+
+-- 6. Última decisión por campaña, cliente y canal (estado consolidado)
+CREATE OR REPLACE VIEW campana.v_estado_cliente_canal AS
+SELECT DISTINCT ON (d.campana, d.customer_id, d.canal)
+       d.campana, d.customer_id, d.cliente, d.canal, d.resultado, d.motivo, d.detalle, d.lote_id,
+       m.estado AS estado_mensaje
+FROM campana.v_decisiones d
+LEFT JOIN campana.mensaje m ON m.mensaje_id = d.mensaje_id
+ORDER BY d.campana, d.customer_id, d.canal, d.lote_id DESC;

@@ -1,0 +1,3 @@
+DROP SCHEMA IF EXISTS campana CASCADE;
+psql:/workspaces/campana_halloween/sql/00_reset.sql:5: NOTICE:  schema "campana" does not exist, skipping
+DROP SCHEMA

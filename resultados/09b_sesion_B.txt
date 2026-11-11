@@ -1,0 +1,24 @@
+SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+
+SELECT 'B' AS sesion, pg_backend_pid() AS pid, clock_timestamp() AS inicio;
+ sesion | pid |            inicio            
+--------+-----+------------------------------
+ B      | 131 | 2026-11-11 20:42:50.13013+00
+
+Timing is on.
+CALL campana.sp_preparar_campana('HALLOWEEN-2026', ARRAY[15,14,13,13], p_actor => 'sesion.B');
+psql:/workspaces/campana_halloween/sql/09b_concurrencia_sesion_B.sql:12: NOTICE:  Lote 12 completado: {"actor": "sesion.B", "campana": "HALLOWEEN-2026", "canales": ["EMAIL", "WHATSAPP"], "lote_id": 12, "decisiones": 6, "exclusiones": 0, "ids_recibidos": 4, "mensajes_nuevos": 2, "clientes_segmento": 3, "clientes_distintos": 3, "mensajes_ya_preparados": 4}
+ p_lote_id |                                                                                                                           p_resumen                                                                                                                            
+-----------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        12 | {"actor": "sesion.B", "campana": "HALLOWEEN-2026", "canales": ["EMAIL", "WHATSAPP"], "lote_id": 12, "decisiones": 6, "exclusiones": 0, "ids_recibidos": 4, "mensajes_nuevos": 2, "clientes_segmento": 3, "clientes_distintos": 3, "mensajes_ya_preparados": 4}
+
+Time: 4105.971 ms (00:04.106)
+Timing is off.
+SELECT 'B: fin' AS paso, clock_timestamp() AS t;
+  paso  |               t               
+--------+-------------------------------
+ B: fin | 2026-11-11 20:42:54.244554+00
+

@@ -1,0 +1,400 @@
+SET client_encoding = 'UTF8';
+SET
+CREATE OR REPLACE FUNCTION campana.tg_campana_ciclo()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    n_ofertas integer;
+    n_terror  integer;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        NEW.estado := 'PREPARACION';
+        NEW.creada_en := now();          NEW.creada_por := campana.fn_actor();
+        NEW.habilitada_en := NULL;       NEW.habilitada_por := NULL;
+        NEW.cerrada_en := NULL;          NEW.cerrada_por := NULL;
+        RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        IF OLD.estado <> 'PREPARACION' THEN
+            RAISE EXCEPTION 'No se puede eliminar la campaña % en estado %', OLD.codigo, OLD.estado;
+        END IF;
+        RETURN OLD;
+    END IF;
+
+    -- UPDATE
+    IF OLD.estado = 'CERRADA' THEN
+        RAISE EXCEPTION 'La campaña % está CERRADA: no admite cambios ni reapertura', OLD.codigo;
+    END IF;
+    IF NEW.campana_id <> OLD.campana_id OR NEW.codigo <> OLD.codigo THEN
+        RAISE EXCEPTION 'La identificación de la campaña (id, código) es inmutable';
+    END IF;
+    IF OLD.estado = 'HABILITADA'
+       AND (NEW.nombre, NEW.hist_desde, NEW.hist_hasta, NEW.vig_desde, NEW.vig_hasta, NEW.min_alquileres)
+           IS DISTINCT FROM
+           (OLD.nombre, OLD.hist_desde, OLD.hist_hasta, OLD.vig_desde, OLD.vig_hasta, OLD.min_alquileres) THEN
+        RAISE EXCEPTION 'Campaña % HABILITADA: las reglas (periodo, vigencia, mínimo, nombre) están congeladas', OLD.codigo;
+    END IF;
+
+    -- Las marcas de ciclo de vida solo las escribe este trigger
+    NEW.creada_en := OLD.creada_en;          NEW.creada_por := OLD.creada_por;
+    NEW.habilitada_en := OLD.habilitada_en;  NEW.habilitada_por := OLD.habilitada_por;
+    NEW.cerrada_en := OLD.cerrada_en;        NEW.cerrada_por := OLD.cerrada_por;
+
+    IF NEW.estado IS DISTINCT FROM OLD.estado THEN
+        IF NOT ((OLD.estado = 'PREPARACION' AND NEW.estado IN ('HABILITADA','CERRADA'))
+             OR (OLD.estado = 'HABILITADA'  AND NEW.estado = 'CERRADA')) THEN
+            RAISE EXCEPTION 'Transición de estado no permitida: % -> %', OLD.estado, NEW.estado;
+        END IF;
+        IF NEW.estado = 'HABILITADA' THEN
+            SELECT count(*) INTO n_ofertas FROM campana.campana_oferta WHERE campana_id = NEW.campana_id;
+            SELECT count(*) INTO n_terror
+              FROM campana.campana_categoria cc JOIN public.category c ON c.category_id = cc.category_id
+             WHERE cc.campana_id = NEW.campana_id AND cc.rol = 'PRINCIPAL' AND c.name = 'Horror';
+            IF n_ofertas = 0 THEN
+                RAISE EXCEPTION 'No se puede habilitar %: no tiene ofertas', NEW.codigo;
+            END IF;
+            IF n_terror = 0 THEN
+                RAISE EXCEPTION 'No se puede habilitar %: falta la categoría Horror como PRINCIPAL', NEW.codigo;
+            END IF;
+            NEW.habilitada_en := now();  NEW.habilitada_por := campana.fn_actor();
+        ELSE
+            NEW.cerrada_en := now();     NEW.cerrada_por := campana.fn_actor();
+        END IF;
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE FUNCTION
+CREATE TRIGGER trg_campana_ciclo
+BEFORE INSERT OR UPDATE OR DELETE ON campana.campana
+FOR EACH ROW EXECUTE FUNCTION campana.tg_campana_ciclo();
+CREATE TRIGGER
+CREATE OR REPLACE FUNCTION campana.tg_campana_cierre()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE campana.mensaje
+       SET estado = 'CANCELADO', motivo_cancelacion = 'Cierre de la campaña ' || NEW.codigo
+     WHERE campana_id = NEW.campana_id AND estado = 'PENDIENTE';
+    RETURN NULL;
+END $$;
+CREATE FUNCTION
+CREATE TRIGGER trg_campana_cierre
+AFTER UPDATE OF estado ON campana.campana
+FOR EACH ROW WHEN (NEW.estado = 'CERRADA' AND OLD.estado <> 'CERRADA')
+EXECUTE FUNCTION campana.tg_campana_cierre();
+CREATE TRIGGER
+CREATE OR REPLACE FUNCTION campana.tg_config_congelada()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    v_ids    integer[];
+    v_id     integer;
+    v_estado text;
+    v_cat    text;
+BEGIN
+    IF TG_OP IN ('UPDATE','DELETE') THEN v_ids := array_append(v_ids, OLD.campana_id); END IF;
+    IF TG_OP IN ('INSERT','UPDATE') THEN v_ids := array_append(v_ids, NEW.campana_id); END IF;
+
+    FOREACH v_id IN ARRAY v_ids LOOP
+        -- FOR SHARE: evita carrera con una habilitación concurrente
+        SELECT estado INTO v_estado FROM campana.campana WHERE campana_id = v_id FOR SHARE;
+        IF v_estado IS DISTINCT FROM 'PREPARACION' THEN
+            RAISE EXCEPTION '%: la campaña % está en estado %; ofertas y categorías solo se modifican en PREPARACION',
+                  TG_TABLE_NAME, v_id, v_estado;
+        END IF;
+    END LOOP;
+
+    -- (IF anidados: PL/pgSQL no garantiza cortocircuito al resolver campos de NEW)
+    IF TG_TABLE_NAME = 'campana_categoria' AND TG_OP <> 'DELETE' THEN
+        IF (to_jsonb(NEW) ->> 'rol') = 'PRINCIPAL' THEN
+            SELECT name INTO v_cat FROM public.category WHERE category_id = (to_jsonb(NEW) ->> 'category_id')::integer;
+            IF v_cat IS DISTINCT FROM 'Horror' THEN
+                RAISE EXCEPTION 'Solo la categoría Horror puede ser PRINCIPAL (se intentó con %)', v_cat;
+            END IF;
+        END IF;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW;
+END $$;
+CREATE FUNCTION
+CREATE TRIGGER trg_oferta_congelada
+BEFORE INSERT OR UPDATE OR DELETE ON campana.campana_oferta
+FOR EACH ROW EXECUTE FUNCTION campana.tg_config_congelada();
+CREATE TRIGGER
+CREATE TRIGGER trg_categoria_congelada
+BEFORE INSERT OR UPDATE OR DELETE ON campana.campana_categoria
+FOR EACH ROW EXECUTE FUNCTION campana.tg_config_congelada();
+CREATE TRIGGER
+CREATE OR REPLACE FUNCTION campana.tg_contacto_normalizar()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    NEW.canal   := upper(btrim(NEW.canal));
+    NEW.destino := nullif(btrim(NEW.destino), '');
+    IF NEW.canal = 'EMAIL' THEN
+        NEW.destino := lower(NEW.destino);
+    ELSIF NEW.canal = 'WHATSAPP' THEN
+        NEW.destino := regexp_replace(NEW.destino, '[[:space:]().-]', '', 'g');  -- quita separadores visuales
+    END IF;
+
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW.customer_id <> OLD.customer_id OR NEW.canal <> OLD.canal THEN
+            RAISE EXCEPTION 'La clave (customer_id, canal) del contacto es inmutable';
+        END IF;
+        -- Un destino nuevo no hereda la verificación del anterior
+        IF NEW.destino IS DISTINCT FROM OLD.destino AND NEW.verificado
+           AND NEW.verificado_en IS NOT DISTINCT FROM OLD.verificado_en THEN
+            NEW.verificado := false;
+            NEW.verificado_en := NULL;
+            NEW.evidencia_verificacion := NULL;
+        END IF;
+    END IF;
+
+    NEW.actualizado_en  := now();
+    NEW.actualizado_por := campana.fn_actor();
+    RETURN NEW;
+END $$;
+CREATE FUNCTION
+CREATE TRIGGER trg_contacto_normalizar
+BEFORE INSERT OR UPDATE ON campana.contacto_canal
+FOR EACH ROW EXECUTE FUNCTION campana.tg_contacto_normalizar();
+CREATE TRIGGER
+CREATE OR REPLACE FUNCTION campana.tg_contacto_cancelar()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    v_motivo text;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        v_motivo := 'Contacto eliminado';
+    ELSE
+        v_motivo := concat_ws('; ',
+            CASE WHEN OLD.autorizado AND NOT NEW.autorizado THEN 'Autorización retirada' END,
+            CASE WHEN OLD.verificado AND NOT NEW.verificado THEN 'Verificación retirada' END,
+            CASE WHEN OLD.destino IS DISTINCT FROM NEW.destino THEN 'Cambio de destino' END);
+        IF v_motivo = '' THEN
+            RETURN NULL;
+        END IF;
+    END IF;
+
+    UPDATE campana.mensaje
+       SET estado = 'CANCELADO', motivo_cancelacion = v_motivo || ' (' || OLD.canal || ')'
+     WHERE customer_id = OLD.customer_id AND canal = OLD.canal AND estado = 'PENDIENTE';
+    RETURN NULL;
+END $$;
+CREATE FUNCTION
+CREATE TRIGGER trg_contacto_cancelar
+AFTER UPDATE OR DELETE ON campana.contacto_canal
+FOR EACH ROW EXECUTE FUNCTION campana.tg_contacto_cancelar();
+CREATE TRIGGER
+CREATE OR REPLACE FUNCTION campana.tg_mensaje_validar()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    k  campana.campana%ROWTYPE;
+    s  record;
+    ch record;
+BEGIN
+    SELECT * INTO k FROM campana.campana WHERE campana_id = NEW.campana_id;
+    IF k.estado IS DISTINCT FROM 'HABILITADA' THEN
+        RAISE EXCEPTION 'Solo se preparan mensajes en campañas HABILITADAS (campaña %, estado %)', NEW.campana_id, k.estado;
+    END IF;
+    IF current_date >= k.vig_hasta THEN
+        RAISE EXCEPTION 'La vigencia de la campaña % terminó el %', k.codigo, k.vig_hasta - 1;
+    END IF;
+    IF NEW.estado IS DISTINCT FROM 'PENDIENTE' OR NEW.cancelado_en IS NOT NULL THEN
+        RAISE EXCEPTION 'Un mensaje solo puede crearse en estado PENDIENTE';
+    END IF;
+    IF NEW.cuerpo IS NULL OR btrim(NEW.cuerpo) = '' THEN
+        RAISE EXCEPTION 'El cuerpo del mensaje es obligatorio';
+    END IF;
+
+    SELECT * INTO s FROM campana.fn_evaluar_segmento(NEW.campana_id, NEW.customer_id);
+    IF NOT s.en_segmento THEN
+        RAISE EXCEPTION 'Cliente % fuera del segmento de la campaña: % (%)', NEW.customer_id, s.motivo, s.detalle;
+    END IF;
+
+    SELECT * INTO ch FROM campana.fn_evaluar_canal(NEW.customer_id, NEW.canal);
+    IF NOT ch.apto THEN
+        RAISE EXCEPTION 'Canal % no apto para el cliente %: % (%)', NEW.canal, NEW.customer_id, ch.motivo, ch.detalle;
+    END IF;
+    IF NEW.destino IS DISTINCT FROM ch.destino THEN
+        RAISE EXCEPTION 'El destino del mensaje (%) no coincide con el destino autorizado y verificado (%)', NEW.destino, ch.destino;
+    END IF;
+
+    NEW.es_prueba := ch.es_prueba;
+    NEW.creado_en := clock_timestamp();
+    NEW.creado_por := campana.fn_actor();
+    NEW.motivo_cancelacion := NULL;
+    NEW.cancelado_por := NULL;
+    RETURN NEW;
+END $$;
+CREATE FUNCTION
+CREATE TRIGGER trg_mensaje_validar
+BEFORE INSERT ON campana.mensaje
+FOR EACH ROW EXECUTE FUNCTION campana.tg_mensaje_validar();
+CREATE TRIGGER
+CREATE OR REPLACE FUNCTION campana.tg_mensaje_proteger()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'Los mensajes no se eliminan, se cancelan (mensaje_id %)', OLD.mensaje_id;
+    END IF;
+
+    IF (NEW.mensaje_id, NEW.campana_id, NEW.customer_id, NEW.canal, NEW.destino, NEW.asunto, NEW.cuerpo,
+        NEW.es_prueba, NEW.lote_id, NEW.creado_en, NEW.creado_por)
+       IS DISTINCT FROM
+       (OLD.mensaje_id, OLD.campana_id, OLD.customer_id, OLD.canal, OLD.destino, OLD.asunto, OLD.cuerpo,
+        OLD.es_prueba, OLD.lote_id, OLD.creado_en, OLD.creado_por) THEN
+        RAISE EXCEPTION 'El contenido del mensaje % es inmutable; solo puede cancelarse', OLD.mensaje_id;
+    END IF;
+
+    IF OLD.estado = 'CANCELADO' THEN
+        IF NEW.estado <> 'CANCELADO'
+           OR (NEW.motivo_cancelacion, NEW.cancelado_en, NEW.cancelado_por)
+              IS DISTINCT FROM (OLD.motivo_cancelacion, OLD.cancelado_en, OLD.cancelado_por) THEN
+            RAISE EXCEPTION 'El mensaje % está CANCELADO y no puede reactivarse ni modificarse', OLD.mensaje_id;
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    -- OLD.estado = 'PENDIENTE'
+    IF NEW.estado = 'CANCELADO' THEN
+        NEW.cancelado_en  := clock_timestamp();
+        NEW.cancelado_por := campana.fn_actor();
+        NEW.motivo_cancelacion := coalesce(nullif(btrim(NEW.motivo_cancelacion), ''), 'Cancelación manual');
+    ELSE
+        NEW.motivo_cancelacion := NULL; NEW.cancelado_en := NULL; NEW.cancelado_por := NULL;
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE FUNCTION
+CREATE TRIGGER trg_mensaje_proteger
+BEFORE UPDATE OR DELETE ON campana.mensaje
+FOR EACH ROW EXECUTE FUNCTION campana.tg_mensaje_proteger();
+CREATE TRIGGER
+CREATE OR REPLACE FUNCTION campana.tg_lote_proteger()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE v_estado text;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        SELECT estado INTO v_estado FROM campana.campana WHERE campana_id = NEW.campana_id;
+        IF v_estado IS DISTINCT FROM 'HABILITADA' THEN
+            RAISE EXCEPTION 'No se registran lotes en campañas no habilitadas (estado %)', v_estado;
+        END IF;
+        NEW.estado := 'EN_PROCESO';
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'Los lotes son evidencia y no se eliminan (lote %)', OLD.lote_id;
+    END IF;
+    IF OLD.estado <> 'EN_PROCESO' THEN
+        RAISE EXCEPTION 'El lote % está COMPLETADO y es inmutable', OLD.lote_id;
+    END IF;
+    IF (NEW.lote_id, NEW.campana_id, NEW.actor, NEW.ids_recibidos, NEW.canales_solicitados, NEW.ejecutado_en)
+       IS DISTINCT FROM (OLD.lote_id, OLD.campana_id, OLD.actor, OLD.ids_recibidos, OLD.canales_solicitados, OLD.ejecutado_en) THEN
+        RAISE EXCEPTION 'La identificación del lote % es inmutable', OLD.lote_id;
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE FUNCTION
+CREATE TRIGGER trg_lote_proteger
+BEFORE INSERT OR UPDATE OR DELETE ON campana.lote
+FOR EACH ROW EXECUTE FUNCTION campana.tg_lote_proteger();
+CREATE TRIGGER
+CREATE OR REPLACE FUNCTION campana.tg_decision_validar()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE l campana.lote%ROWTYPE;
+BEGIN
+    SELECT * INTO l FROM campana.lote WHERE lote_id = NEW.lote_id;
+    IF l.estado IS DISTINCT FROM 'EN_PROCESO' OR l.campana_id <> NEW.campana_id THEN
+        RAISE EXCEPTION 'Las decisiones solo se registran dentro de un lote EN_PROCESO de la misma campaña';
+    END IF;
+    IF NOT (NEW.canal = ANY (l.canales_solicitados)) THEN
+        RAISE EXCEPTION 'El canal % no fue solicitado en el lote %', NEW.canal, NEW.lote_id;
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE FUNCTION
+CREATE TRIGGER trg_decision_validar
+BEFORE INSERT ON campana.decision
+FOR EACH ROW EXECUTE FUNCTION campana.tg_decision_validar();
+CREATE TRIGGER
+CREATE OR REPLACE FUNCTION campana.tg_solo_insercion()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'Operación % rechazada sobre %.%: tabla protegida (evidencia de solo inserción o con reglas de cancelación)',
+          TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME;
+END $$;
+CREATE FUNCTION
+CREATE TRIGGER trg_decision_solo_insercion
+BEFORE UPDATE OR DELETE ON campana.decision
+FOR EACH ROW EXECUTE FUNCTION campana.tg_solo_insercion();
+CREATE TRIGGER
+CREATE TRIGGER trg_auditoria_solo_insercion
+BEFORE UPDATE OR DELETE ON campana.auditoria
+FOR EACH ROW EXECUTE FUNCTION campana.tg_solo_insercion();
+CREATE TRIGGER
+CREATE TRIGGER trg_mensaje_no_truncate   BEFORE TRUNCATE ON campana.mensaje        FOR EACH STATEMENT EXECUTE FUNCTION campana.tg_solo_insercion();
+CREATE TRIGGER
+CREATE TRIGGER trg_decision_no_truncate  BEFORE TRUNCATE ON campana.decision       FOR EACH STATEMENT EXECUTE FUNCTION campana.tg_solo_insercion();
+CREATE TRIGGER
+CREATE TRIGGER trg_lote_no_truncate      BEFORE TRUNCATE ON campana.lote           FOR EACH STATEMENT EXECUTE FUNCTION campana.tg_solo_insercion();
+CREATE TRIGGER
+CREATE TRIGGER trg_auditoria_no_truncate BEFORE TRUNCATE ON campana.auditoria      FOR EACH STATEMENT EXECUTE FUNCTION campana.tg_solo_insercion();
+CREATE TRIGGER
+CREATE TRIGGER trg_contacto_no_truncate  BEFORE TRUNCATE ON campana.contacto_canal FOR EACH STATEMENT EXECUTE FUNCTION campana.tg_solo_insercion();
+CREATE TRIGGER
+CREATE OR REPLACE FUNCTION campana.tg_auditar()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    v_old    jsonb;
+    v_new    jsonb;
+    v_fila   jsonb;
+    v_clave  text;
+    v_evento text;
+BEGIN
+    IF TG_OP <> 'INSERT' THEN v_old := to_jsonb(OLD); END IF;
+    IF TG_OP <> 'DELETE' THEN v_new := to_jsonb(NEW); END IF;
+    IF TG_OP = 'UPDATE' AND v_old = v_new THEN
+        RETURN NULL;                                   -- actualización sin cambios
+    END IF;
+    v_fila := coalesce(v_new, v_old);
+
+    -- TG_ARGV[0]: columnas que forman la clave legible del registro
+    SELECT string_agg(col || '=' || coalesce(v_fila ->> col, 'NULL'), ', ')
+      INTO v_clave FROM unnest(string_to_array(TG_ARGV[0], ',')) AS col;
+
+    v_evento := CASE
+        WHEN TG_TABLE_NAME = 'mensaje' AND TG_OP = 'INSERT' THEN 'MENSAJE_CREADO'
+        WHEN TG_TABLE_NAME = 'mensaje' AND TG_OP = 'UPDATE'
+             AND (v_old ->> 'estado') <> (v_new ->> 'estado') THEN 'MENSAJE_' || (v_new ->> 'estado')
+        WHEN TG_TABLE_NAME = 'campana' AND TG_OP = 'UPDATE'
+             AND (v_old ->> 'estado') <> (v_new ->> 'estado')
+             THEN 'CAMPANA_' || (v_old ->> 'estado') || '_A_' || (v_new ->> 'estado')
+        WHEN TG_TABLE_NAME = 'contacto_canal' AND TG_OP = 'UPDATE' THEN
+             'CONTACTO_' || coalesce(nullif(concat_ws('+',
+                 CASE WHEN (v_old ->> 'autorizado') <> (v_new ->> 'autorizado')
+                      THEN CASE WHEN (v_new ->> 'autorizado')::boolean THEN 'AUTORIZADO' ELSE 'AUTORIZACION_RETIRADA' END END,
+                 CASE WHEN (v_old ->> 'verificado') <> (v_new ->> 'verificado')
+                      THEN CASE WHEN (v_new ->> 'verificado')::boolean THEN 'VERIFICADO' ELSE 'VERIFICACION_RETIRADA' END END,
+                 CASE WHEN (v_old ->> 'destino') IS DISTINCT FROM (v_new ->> 'destino') THEN 'DESTINO_CAMBIADO' END), ''),
+                 'ACTUALIZADO')
+        ELSE upper(TG_TABLE_NAME) || '_' || TG_OP
+    END;
+
+    INSERT INTO campana.auditoria (actor, tabla, operacion, clave, evento, antes, despues)
+    VALUES (campana.fn_actor(), TG_TABLE_NAME, TG_OP, v_clave, v_evento, v_old, v_new);
+    RETURN NULL;
+END $$;
+CREATE FUNCTION
+CREATE TRIGGER trg_auditar_campana   AFTER INSERT OR UPDATE OR DELETE ON campana.campana
+FOR EACH ROW EXECUTE FUNCTION campana.tg_auditar('campana_id,codigo');
+CREATE TRIGGER
+CREATE TRIGGER trg_auditar_oferta    AFTER INSERT OR UPDATE OR DELETE ON campana.campana_oferta
+FOR EACH ROW EXECUTE FUNCTION campana.tg_auditar('campana_id,orden');
+CREATE TRIGGER
+CREATE TRIGGER trg_auditar_categoria AFTER INSERT OR UPDATE OR DELETE ON campana.campana_categoria
+FOR EACH ROW EXECUTE FUNCTION campana.tg_auditar('campana_id,category_id');
+CREATE TRIGGER
+CREATE TRIGGER trg_auditar_contacto  AFTER INSERT OR UPDATE OR DELETE ON campana.contacto_canal
+FOR EACH ROW EXECUTE FUNCTION campana.tg_auditar('customer_id,canal');
+CREATE TRIGGER
+CREATE TRIGGER trg_auditar_mensaje   AFTER INSERT OR UPDATE OR DELETE ON campana.mensaje
+FOR EACH ROW EXECUTE FUNCTION campana.tg_auditar('mensaje_id,customer_id,canal');
+CREATE TRIGGER

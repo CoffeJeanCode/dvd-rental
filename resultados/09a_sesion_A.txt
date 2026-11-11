@@ -1,0 +1,30 @@
+SELECT 'A' AS sesion, pg_backend_pid() AS pid, clock_timestamp() AS inicio;
+ sesion | pid |            inicio             
+--------+-----+-------------------------------
+ A      | 132 | 2026-11-11 20:42:48.137975+00
+
+BEGIN;
+BEGIN
+CALL campana.sp_preparar_campana('HALLOWEEN-2026', ARRAY[12,13,14], p_actor => 'sesion.A');
+psql:/workspaces/campana_halloween/sql/09a_concurrencia_sesion_A.sql:11: NOTICE:  Lote 11 completado: {"actor": "sesion.A", "campana": "HALLOWEEN-2026", "canales": ["EMAIL", "WHATSAPP"], "lote_id": 11, "decisiones": 6, "exclusiones": 0, "ids_recibidos": 3, "mensajes_nuevos": 6, "clientes_segmento": 3, "clientes_distintos": 3, "mensajes_ya_preparados": 0}
+ p_lote_id |                                                                                                                           p_resumen                                                                                                                            
+-----------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        11 | {"actor": "sesion.A", "campana": "HALLOWEEN-2026", "canales": ["EMAIL", "WHATSAPP"], "lote_id": 11, "decisiones": 6, "exclusiones": 0, "ids_recibidos": 3, "mensajes_nuevos": 6, "clientes_segmento": 3, "clientes_distintos": 3, "mensajes_ya_preparados": 0}
+
+SELECT 'A: lote preparado SIN COMMIT; pausa de 6 s' AS paso, clock_timestamp() AS t;
+                    paso                    |               t               
+--------------------------------------------+-------------------------------
+ A: lote preparado SIN COMMIT; pausa de 6 s | 2026-11-11 20:42:48.182549+00
+
+SELECT pg_sleep(6);
+ pg_sleep 
+----------
+ 
+
+COMMIT;
+COMMIT
+SELECT 'A: COMMIT' AS paso, clock_timestamp() AS t;
+   paso    |               t               
+-----------+-------------------------------
+ A: COMMIT | 2026-11-11 20:42:54.214565+00
+

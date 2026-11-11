@@ -1,0 +1,241 @@
+SET client_encoding = 'UTF8';
+SET
+##### 1. DESTINATARIOS PREPARADOS - lista de despacho por canal (HALLOWEEN-2026)
+SELECT canal, customer_id, cliente, destino, es_prueba, mensaje_id
+FROM campana.v_despacho WHERE campana = 'HALLOWEEN-2026' ORDER BY canal, customer_id;
+  canal   | customer_id |     cliente     |               destino                | es_prueba | mensaje_id 
+----------+-------------+-----------------+--------------------------------------+-----------+------------
+ EMAIL    |           1 | Mary Smith      | mary.smith@correo-prueba.example     | t         |          1
+ EMAIL    |           3 | Linda Williams  | linda.williams@correo-prueba.example | t         |          3
+ EMAIL    |           4 | Barbara Jones   | barbara.jones@correo-prueba.example  | t         |          5
+ EMAIL    |          10 | Dorothy Taylor  | dorothy.taylor@correo-prueba.example | t         |         18
+ EMAIL    |          12 | Nancy Thomas    | nancy.thomas@correo-prueba.example   | t         |         45
+ EMAIL    |          13 | Karen Jackson   | karen.jackson@correo-prueba.example  | t         |         47
+ EMAIL    |          14 | Betty White     | betty.white@correo-prueba.example    | t         |         49
+ EMAIL    |          15 | Helen Harris    | helen.harris@correo-prueba.example   | t         |         55
+ EMAIL    |          17 | Donna Thompson  | donna.thompson@correo-prueba.example | t         |         37
+ EMAIL    |          18 | Carol Garcia    | carol.garcia@correo-prueba.example   | t         |         39
+ EMAIL    |          19 | Ruth Martinez   | ruth.martinez@correo-prueba.example  | t         |         41
+ WHATSAPP |           1 | Mary Smith      | +573005550001                        | t         |          2
+ WHATSAPP |           3 | Linda Williams  | +573005550003                        | t         |          4
+ WHATSAPP |           5 | Elizabeth Brown | +573005550005                        | t         |          6
+ WHATSAPP |           9 | Margaret Moore  | +573005550009                        | t         |         17
+ WHATSAPP |          11 | Lisa Anderson   | +573005550011                        | t         |         21
+ WHATSAPP |          12 | Nancy Thomas    | +573005550012                        | t         |         46
+ WHATSAPP |          13 | Karen Jackson   | +573005550013                        | t         |         48
+ WHATSAPP |          14 | Betty White     | +573005550014                        | t         |         50
+ WHATSAPP |          15 | Helen Harris    | +573005550015                        | t         |         56
+ WHATSAPP |          17 | Donna Thompson  | +573005550017                        | t         |         38
+ WHATSAPP |          18 | Carol Garcia    | +573005550018                        | t         |         40
+ WHATSAPP |          19 | Ruth Martinez   | +573005550019                        | t         |         42
+
+SELECT canal, count(*) AS pendientes_de_despacho
+FROM campana.v_despacho WHERE campana = 'HALLOWEEN-2026' GROUP BY canal ORDER BY canal;
+  canal   | pendientes_de_despacho 
+----------+------------------------
+ EMAIL    |                     11
+ WHATSAPP |                     12
+
+##### 1b. Todos los mensajes con estado de preparación
+SELECT mensaje_id, campana, customer_id, cliente, canal, destino, estado, motivo_cancelacion
+FROM campana.v_destinatarios ORDER BY campana, customer_id, canal;
+ mensaje_id |        campana        | customer_id |     cliente     |  canal   |               destino                |  estado   |                 motivo_cancelacion                  
+------------+-----------------------+-------------+-----------------+----------+--------------------------------------+-----------+-----------------------------------------------------
+          1 | HALLOWEEN-2026        |           1 | Mary Smith      | EMAIL    | mary.smith@correo-prueba.example     | PENDIENTE | 
+          2 | HALLOWEEN-2026        |           1 | Mary Smith      | WHATSAPP | +573005550001                        | PENDIENTE | 
+          3 | HALLOWEEN-2026        |           3 | Linda Williams  | EMAIL    | linda.williams@correo-prueba.example | PENDIENTE | 
+          4 | HALLOWEEN-2026        |           3 | Linda Williams  | WHATSAPP | +573005550003                        | PENDIENTE | 
+          5 | HALLOWEEN-2026        |           4 | Barbara Jones   | EMAIL    | barbara.jones@correo-prueba.example  | PENDIENTE | 
+          6 | HALLOWEEN-2026        |           5 | Elizabeth Brown | WHATSAPP | +573005550005                        | PENDIENTE | 
+         16 | HALLOWEEN-2026        |           9 | Margaret Moore  | EMAIL    | margaret.moore@correo-prueba.example | CANCELADO | Autorización retirada (EMAIL)
+         17 | HALLOWEEN-2026        |           9 | Margaret Moore  | WHATSAPP | +573005550009                        | PENDIENTE | 
+         18 | HALLOWEEN-2026        |          10 | Dorothy Taylor  | EMAIL    | dorothy.taylor@correo-prueba.example | PENDIENTE | 
+         19 | HALLOWEEN-2026        |          10 | Dorothy Taylor  | WHATSAPP | +573005550010                        | CANCELADO | Verificación retirada; Cambio de destino (WHATSAPP)
+         20 | HALLOWEEN-2026        |          11 | Lisa Anderson   | EMAIL    | lisa.anderson@correo-prueba.example  | CANCELADO | Verificación retirada (EMAIL)
+         21 | HALLOWEEN-2026        |          11 | Lisa Anderson   | WHATSAPP | +573005550011                        | PENDIENTE | 
+         45 | HALLOWEEN-2026        |          12 | Nancy Thomas    | EMAIL    | nancy.thomas@correo-prueba.example   | PENDIENTE | 
+         46 | HALLOWEEN-2026        |          12 | Nancy Thomas    | WHATSAPP | +573005550012                        | PENDIENTE | 
+         47 | HALLOWEEN-2026        |          13 | Karen Jackson   | EMAIL    | karen.jackson@correo-prueba.example  | PENDIENTE | 
+         48 | HALLOWEEN-2026        |          13 | Karen Jackson   | WHATSAPP | +573005550013                        | PENDIENTE | 
+         49 | HALLOWEEN-2026        |          14 | Betty White     | EMAIL    | betty.white@correo-prueba.example    | PENDIENTE | 
+         50 | HALLOWEEN-2026        |          14 | Betty White     | WHATSAPP | +573005550014                        | PENDIENTE | 
+         55 | HALLOWEEN-2026        |          15 | Helen Harris    | EMAIL    | helen.harris@correo-prueba.example   | PENDIENTE | 
+         56 | HALLOWEEN-2026        |          15 | Helen Harris    | WHATSAPP | +573005550015                        | PENDIENTE | 
+         37 | HALLOWEEN-2026        |          17 | Donna Thompson  | EMAIL    | donna.thompson@correo-prueba.example | PENDIENTE | 
+         38 | HALLOWEEN-2026        |          17 | Donna Thompson  | WHATSAPP | +573005550017                        | PENDIENTE | 
+         39 | HALLOWEEN-2026        |          18 | Carol Garcia    | EMAIL    | carol.garcia@correo-prueba.example   | PENDIENTE | 
+         40 | HALLOWEEN-2026        |          18 | Carol Garcia    | WHATSAPP | +573005550018                        | PENDIENTE | 
+         41 | HALLOWEEN-2026        |          19 | Ruth Martinez   | EMAIL    | ruth.martinez@correo-prueba.example  | PENDIENTE | 
+         42 | HALLOWEEN-2026        |          19 | Ruth Martinez   | WHATSAPP | +573005550019                        | PENDIENTE | 
+         43 | HALLOWEEN-2026-FIELES |          12 | Nancy Thomas    | EMAIL    | nancy.thomas@correo-prueba.example   | PENDIENTE | 
+         44 | HALLOWEEN-2026-FIELES |          18 | Carol Garcia    | EMAIL    | carol.garcia@correo-prueba.example   | PENDIENTE | 
+
+##### 2. DECISIONES - estado consolidado (última decisión) por cliente y canal
+SELECT customer_id, cliente, canal, resultado, motivo, estado_mensaje
+FROM campana.v_estado_cliente_canal WHERE campana = 'HALLOWEEN-2026' ORDER BY customer_id, canal;
+ customer_id |     cliente     |  canal   | resultado |          motivo          | estado_mensaje 
+-------------+-----------------+----------+-----------+--------------------------+----------------
+           1 | Mary Smith      | EMAIL    | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+           1 | Mary Smith      | WHATSAPP | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+           3 | Linda Williams  | EMAIL    | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+           3 | Linda Williams  | WHATSAPP | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+           4 | Barbara Jones   | EMAIL    | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+           4 | Barbara Jones   | WHATSAPP | EXCLUIDO  | SIN_AUTORIZACION         | 
+           5 | Elizabeth Brown | EMAIL    | EXCLUIDO  | SIN_CONTACTO             | 
+           5 | Elizabeth Brown | WHATSAPP | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+           7 | Maria Miller    | EMAIL    | EXCLUIDO  | SIN_CONTACTO             | 
+           7 | Maria Miller    | WHATSAPP | EXCLUIDO  | SIN_CONTACTO             | 
+           8 | Susan Wilson    | EMAIL    | EXCLUIDO  | DESTINO_INVALIDO         | 
+           8 | Susan Wilson    | WHATSAPP | EXCLUIDO  | DESTINO_NO_VERIFICADO    | 
+           9 | Margaret Moore  | EMAIL    | EXCLUIDO  | MENSAJE_CANCELADO_PREVIO | CANCELADO
+           9 | Margaret Moore  | WHATSAPP | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+          10 | Dorothy Taylor  | EMAIL    | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+          10 | Dorothy Taylor  | WHATSAPP | EXCLUIDO  | MENSAJE_CANCELADO_PREVIO | CANCELADO
+          11 | Lisa Anderson   | EMAIL    | EXCLUIDO  | DESTINO_NO_VERIFICADO    | 
+          11 | Lisa Anderson   | WHATSAPP | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+          12 | Nancy Thomas    | EMAIL    | INCLUIDO  | PREPARADO_NUEVO          | PENDIENTE
+          12 | Nancy Thomas    | WHATSAPP | INCLUIDO  | PREPARADO_NUEVO          | PENDIENTE
+          13 | Karen Jackson   | EMAIL    | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+          13 | Karen Jackson   | WHATSAPP | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+          14 | Betty White     | EMAIL    | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+          14 | Betty White     | WHATSAPP | INCLUIDO  | YA_PREPARADO             | PENDIENTE
+          15 | Helen Harris    | EMAIL    | INCLUIDO  | PREPARADO_NUEVO          | PENDIENTE
+          15 | Helen Harris    | WHATSAPP | INCLUIDO  | PREPARADO_NUEVO          | PENDIENTE
+          16 | Sandra Martin   | EMAIL    | EXCLUIDO  | CLIENTE_INACTIVO         | 
+          16 | Sandra Martin   | WHATSAPP | EXCLUIDO  | CLIENTE_INACTIVO         | 
+          17 | Donna Thompson  | EMAIL    | INCLUIDO  | PREPARADO_NUEVO          | PENDIENTE
+          17 | Donna Thompson  | WHATSAPP | INCLUIDO  | PREPARADO_NUEVO          | PENDIENTE
+          18 | Carol Garcia    | EMAIL    | INCLUIDO  | PREPARADO_NUEVO          | PENDIENTE
+          18 | Carol Garcia    | WHATSAPP | INCLUIDO  | PREPARADO_NUEVO          | PENDIENTE
+          19 | Ruth Martinez   | EMAIL    | INCLUIDO  | PREPARADO_NUEVO          | PENDIENTE
+          19 | Ruth Martinez   | WHATSAPP | INCLUIDO  | PREPARADO_NUEVO          | PENDIENTE
+          20 | Sharon Robinson | EMAIL    | EXCLUIDO  | HISTORIAL_INSUFICIENTE   | 
+          20 | Sharon Robinson | WHATSAPP | EXCLUIDO  | HISTORIAL_INSUFICIENTE   | 
+       99999 | (no existe)     | EMAIL    | EXCLUIDO  | CLIENTE_INEXISTENTE      | 
+       99999 | (no existe)     | WHATSAPP | EXCLUIDO  | CLIENTE_INEXISTENTE      | 
+
+##### 2b. Exclusiones por motivo (todas las decisiones registradas)
+SELECT campana, resultado, motivo, count(*) AS decisiones
+FROM campana.v_decisiones GROUP BY 1,2,3 ORDER BY 1,2,3;
+        campana        | resultado |          motivo          | decisiones 
+-----------------------+-----------+--------------------------+------------
+ HALLOWEEN-2026        | EXCLUIDO  | CLIENTE_INACTIVO         |          4
+ HALLOWEEN-2026        | EXCLUIDO  | CLIENTE_INEXISTENTE      |          4
+ HALLOWEEN-2026        | EXCLUIDO  | DESTINO_INVALIDO         |          2
+ HALLOWEEN-2026        | EXCLUIDO  | DESTINO_NO_VERIFICADO    |          4
+ HALLOWEEN-2026        | EXCLUIDO  | HISTORIAL_INSUFICIENTE   |          4
+ HALLOWEEN-2026        | EXCLUIDO  | MENSAJE_CANCELADO_PREVIO |          2
+ HALLOWEEN-2026        | EXCLUIDO  | SIN_AUTORIZACION         |          3
+ HALLOWEEN-2026        | EXCLUIDO  | SIN_CONTACTO             |          6
+ HALLOWEEN-2026        | INCLUIDO  | PREPARADO_NUEVO          |         26
+ HALLOWEEN-2026        | INCLUIDO  | YA_PREPARADO             |         16
+ HALLOWEEN-2026-FIELES | EXCLUIDO  | HISTORIAL_INSUFICIENTE   |          1
+ HALLOWEEN-2026-FIELES | INCLUIDO  | PREPARADO_NUEVO          |          2
+
+##### 3. RESUMEN DE EJECUCIONES (conciliación)
+SELECT lote_id, campana, actor, n_ids_recibidos AS recibidos, n_clientes_distintos AS distintos,
+       canales_solicitados AS canales, n_clientes_segmento AS segmento, n_mensajes_nuevos AS nuevos,
+       n_mensajes_ya_preparados AS ya_prep, n_decisiones AS decisiones, n_exclusiones AS exclusiones, conciliado
+FROM campana.v_resumen_lote ORDER BY lote_id;
+ lote_id |        campana        |     actor     | recibidos | distintos |     canales      | segmento | nuevos | ya_prep | decisiones | exclusiones | conciliado 
+---------+-----------------------+---------------+-----------+-----------+------------------+----------+--------+---------+------------+-------------+------------
+       1 | HALLOWEEN-2026        | ana.marketing |        12 |         9 | {EMAIL,WHATSAPP} |        6 |      6 |       0 |         18 |          12 | t
+       2 | HALLOWEEN-2026        | ana.marketing |        12 |         9 | {EMAIL,WHATSAPP} |        6 |      0 |       6 |         18 |          12 | t
+       3 | HALLOWEEN-2026        | ana.marketing |         1 |         1 | {WHATSAPP}       |        1 |      0 |       1 |          1 |           0 | t
+       5 | HALLOWEEN-2026        | ana.marketing |         3 |         3 | {EMAIL,WHATSAPP} |        3 |      6 |       0 |          6 |           0 | t
+       6 | HALLOWEEN-2026        | ana.marketing |         3 |         3 | {EMAIL,WHATSAPP} |        3 |      0 |       3 |          6 |           3 | t
+       7 | HALLOWEEN-2026        | ana.marketing |         2 |         2 | {EMAIL,WHATSAPP} |        2 |      0 |       2 |          4 |           2 | t
+       9 | HALLOWEEN-2026        | ana.marketing |         3 |         3 | {EMAIL,WHATSAPP} |        3 |      6 |       0 |          6 |           0 | t
+      10 | HALLOWEEN-2026-FIELES | ana.marketing |         3 |         3 | {EMAIL}          |        2 |      2 |       0 |          3 |           1 | t
+      11 | HALLOWEEN-2026        | sesion.A      |         3 |         3 | {EMAIL,WHATSAPP} |        3 |      6 |       0 |          6 |           0 | t
+      12 | HALLOWEEN-2026        | sesion.B      |         4 |         3 | {EMAIL,WHATSAPP} |        3 |      2 |       4 |          6 |           0 | t
+
+##### 4. AUDITORÍA - creación de mensajes y cambios de estado (fecha y actor)
+SELECT auditoria_id, to_char(ocurrido_en, 'YYYY-MM-DD HH24:MI:SS.MS') AS ocurrido_en, actor, tabla, clave, evento,
+       estado_antes, estado_despues, motivo_cancelacion
+FROM campana.v_auditoria
+WHERE evento LIKE 'MENSAJE_%' OR evento LIKE 'CAMPANA_%' OR evento LIKE 'CONTACTO_%'
+ORDER BY auditoria_id;
+ auditoria_id |       ocurrido_en       |       actor       |       tabla       |                     clave                     |                     evento                      | estado_antes | estado_despues |                 motivo_cancelacion                  
+--------------+-------------------------+-------------------+-------------------+-----------------------------------------------+-------------------------------------------------+--------------+----------------+-----------------------------------------------------
+            1 | 2026-11-11 20:42:46.961 | marketing.config  | campana           | campana_id=1, codigo=HALLOWEEN-2026           | CAMPANA_INSERT                                  |              | PREPARACION    | 
+            2 | 2026-11-11 20:42:46.972 | marketing.config  | campana_oferta    | campana_id=1, orden=1                         | CAMPANA_OFERTA_INSERT                           |              |                | 
+            3 | 2026-11-11 20:42:46.972 | marketing.config  | campana_oferta    | campana_id=1, orden=2                         | CAMPANA_OFERTA_INSERT                           |              |                | 
+            4 | 2026-11-11 20:42:46.983 | marketing.config  | campana_categoria | campana_id=1, category_id=11                  | CAMPANA_CATEGORIA_INSERT                        |              |                | 
+            5 | 2026-11-11 20:42:46.984 | marketing.config  | campana_categoria | campana_id=1, category_id=14                  | CAMPANA_CATEGORIA_INSERT                        |              |                | 
+            6 | 2026-11-11 20:42:46.991 | marketing.config  | campana           | campana_id=1, codigo=HALLOWEEN-2026           | CAMPANA_PREPARACION_A_HABILITADA                | PREPARACION  | HABILITADA     | 
+            7 | 2026-11-11 20:42:47.126 | qa.datos_prueba   | contacto_canal    | customer_id=1, canal=EMAIL                    | CONTACTO_CANAL_INSERT                           |              |                | 
+            8 | 2026-11-11 20:42:47.126 | qa.datos_prueba   | contacto_canal    | customer_id=1, canal=WHATSAPP                 | CONTACTO_CANAL_INSERT                           |              |                | 
+            9 | 2026-11-11 20:42:47.126 | qa.datos_prueba   | contacto_canal    | customer_id=3, canal=EMAIL                    | CONTACTO_CANAL_INSERT                           |              |                | 
+           10 | 2026-11-11 20:42:47.126 | qa.datos_prueba   | contacto_canal    | customer_id=3, canal=WHATSAPP                 | CONTACTO_CANAL_INSERT                           |              |                | 
+           11 | 2026-11-11 20:42:47.127 | qa.datos_prueba   | contacto_canal    | customer_id=4, canal=EMAIL                    | CONTACTO_CANAL_INSERT                           |              |                | 
+           12 | 2026-11-11 20:42:47.127 | qa.datos_prueba   | contacto_canal    | customer_id=4, canal=WHATSAPP                 | CONTACTO_CANAL_INSERT                           |              |                | 
+           13 | 2026-11-11 20:42:47.127 | qa.datos_prueba   | contacto_canal    | customer_id=5, canal=WHATSAPP                 | CONTACTO_CANAL_INSERT                           |              |                | 
+           14 | 2026-11-11 20:42:47.127 | qa.datos_prueba   | contacto_canal    | customer_id=8, canal=EMAIL                    | CONTACTO_CANAL_INSERT                           |              |                | 
+           15 | 2026-11-11 20:42:47.127 | qa.datos_prueba   | contacto_canal    | customer_id=8, canal=WHATSAPP                 | CONTACTO_CANAL_INSERT                           |              |                | 
+           16 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=9, canal=EMAIL                    | CONTACTO_CANAL_INSERT                           |              |                | 
+           17 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=9, canal=WHATSAPP                 | CONTACTO_CANAL_INSERT                           |              |                | 
+           18 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=10, canal=EMAIL                   | CONTACTO_CANAL_INSERT                           |              |                | 
+           19 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=10, canal=WHATSAPP                | CONTACTO_CANAL_INSERT                           |              |                | 
+           20 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=11, canal=EMAIL                   | CONTACTO_CANAL_INSERT                           |              |                | 
+           21 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=11, canal=WHATSAPP                | CONTACTO_CANAL_INSERT                           |              |                | 
+           22 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=12, canal=EMAIL                   | CONTACTO_CANAL_INSERT                           |              |                | 
+           23 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=12, canal=WHATSAPP                | CONTACTO_CANAL_INSERT                           |              |                | 
+           24 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=13, canal=EMAIL                   | CONTACTO_CANAL_INSERT                           |              |                | 
+           25 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=13, canal=WHATSAPP                | CONTACTO_CANAL_INSERT                           |              |                | 
+           26 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=14, canal=EMAIL                   | CONTACTO_CANAL_INSERT                           |              |                | 
+           27 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=14, canal=WHATSAPP                | CONTACTO_CANAL_INSERT                           |              |                | 
+           28 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=15, canal=EMAIL                   | CONTACTO_CANAL_INSERT                           |              |                | 
+           29 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=15, canal=WHATSAPP                | CONTACTO_CANAL_INSERT                           |              |                | 
+           30 | 2026-11-11 20:42:47.128 | qa.datos_prueba   | contacto_canal    | customer_id=16, canal=EMAIL                   | CONTACTO_CANAL_INSERT                           |              |                | 
+           31 | 2026-11-11 20:42:47.129 | qa.datos_prueba   | contacto_canal    | customer_id=16, canal=WHATSAPP                | CONTACTO_CANAL_INSERT                           |              |                | 
+           32 | 2026-11-11 20:42:47.129 | qa.datos_prueba   | contacto_canal    | customer_id=17, canal=EMAIL                   | CONTACTO_CANAL_INSERT                           |              |                | 
+           33 | 2026-11-11 20:42:47.129 | qa.datos_prueba   | contacto_canal    | customer_id=17, canal=WHATSAPP                | CONTACTO_CANAL_INSERT                           |              |                | 
+           34 | 2026-11-11 20:42:47.129 | qa.datos_prueba   | contacto_canal    | customer_id=18, canal=EMAIL                   | CONTACTO_CANAL_INSERT                           |              |                | 
+           35 | 2026-11-11 20:42:47.129 | qa.datos_prueba   | contacto_canal    | customer_id=18, canal=WHATSAPP                | CONTACTO_CANAL_INSERT                           |              |                | 
+           36 | 2026-11-11 20:42:47.129 | qa.datos_prueba   | contacto_canal    | customer_id=19, canal=EMAIL                   | CONTACTO_CANAL_INSERT                           |              |                | 
+           37 | 2026-11-11 20:42:47.129 | qa.datos_prueba   | contacto_canal    | customer_id=19, canal=WHATSAPP                | CONTACTO_CANAL_INSERT                           |              |                | 
+           38 | 2026-11-11 20:42:47.129 | qa.datos_prueba   | contacto_canal    | customer_id=20, canal=EMAIL                   | CONTACTO_CANAL_INSERT                           |              |                | 
+           39 | 2026-11-11 20:42:47.129 | qa.datos_prueba   | contacto_canal    | customer_id=20, canal=WHATSAPP                | CONTACTO_CANAL_INSERT                           |              |                | 
+           40 | 2026-11-11 20:42:47.362 | ana.marketing     | mensaje           | mensaje_id=1, customer_id=1, canal=EMAIL      | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           41 | 2026-11-11 20:42:47.369 | ana.marketing     | mensaje           | mensaje_id=2, customer_id=1, canal=WHATSAPP   | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           42 | 2026-11-11 20:42:47.372 | ana.marketing     | mensaje           | mensaje_id=3, customer_id=3, canal=EMAIL      | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           43 | 2026-11-11 20:42:47.374 | ana.marketing     | mensaje           | mensaje_id=4, customer_id=3, canal=WHATSAPP   | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           44 | 2026-11-11 20:42:47.377 | ana.marketing     | mensaje           | mensaje_id=5, customer_id=4, canal=EMAIL      | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           45 | 2026-11-11 20:42:47.383 | ana.marketing     | mensaje           | mensaje_id=6, customer_id=5, canal=WHATSAPP   | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           48 | 2026-11-11 20:42:47.595 | ana.marketing     | mensaje           | mensaje_id=16, customer_id=9, canal=EMAIL     | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           49 | 2026-11-11 20:42:47.597 | ana.marketing     | mensaje           | mensaje_id=17, customer_id=9, canal=WHATSAPP  | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           50 | 2026-11-11 20:42:47.599 | ana.marketing     | mensaje           | mensaje_id=18, customer_id=10, canal=EMAIL    | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           51 | 2026-11-11 20:42:47.600 | ana.marketing     | mensaje           | mensaje_id=19, customer_id=10, canal=WHATSAPP | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           52 | 2026-11-11 20:42:47.601 | ana.marketing     | mensaje           | mensaje_id=20, customer_id=11, canal=EMAIL    | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           53 | 2026-11-11 20:42:47.602 | ana.marketing     | mensaje           | mensaje_id=21, customer_id=11, canal=WHATSAPP | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           54 | 2026-11-11 20:42:47.619 | soporte.bajas     | contacto_canal    | customer_id=9, canal=EMAIL                    | CONTACTO_AUTORIZACION_RETIRADA                  |              |                | 
+           55 | 2026-11-11 20:42:47.621 | soporte.bajas     | mensaje           | mensaje_id=16, customer_id=9, canal=EMAIL     | MENSAJE_CANCELADO                               | PENDIENTE    | CANCELADO      | Autorización retirada (EMAIL)
+           56 | 2026-11-11 20:42:47.633 | soporte.contactos | contacto_canal    | customer_id=10, canal=WHATSAPP                | CONTACTO_VERIFICACION_RETIRADA+DESTINO_CAMBIADO |              |                | 
+           57 | 2026-11-11 20:42:47.633 | soporte.contactos | mensaje           | mensaje_id=19, customer_id=10, canal=WHATSAPP | MENSAJE_CANCELADO                               | PENDIENTE    | CANCELADO      | Verificación retirada; Cambio de destino (WHATSAPP)
+           58 | 2026-11-11 20:42:47.642 | soporte.contactos | contacto_canal    | customer_id=11, canal=EMAIL                   | CONTACTO_VERIFICACION_RETIRADA                  |              |                | 
+           59 | 2026-11-11 20:42:47.642 | soporte.contactos | mensaje           | mensaje_id=20, customer_id=11, canal=EMAIL    | MENSAJE_CANCELADO                               | PENDIENTE    | CANCELADO      | Verificación retirada (EMAIL)
+           60 | 2026-11-11 20:42:47.684 | postgres          | contacto_canal    | customer_id=9, canal=EMAIL                    | CONTACTO_AUTORIZADO                             |              |                | 
+           61 | 2026-11-11 20:42:47.690 | postgres          | contacto_canal    | customer_id=10, canal=WHATSAPP                | CONTACTO_VERIFICADO                             |              |                | 
+           68 | 2026-11-11 20:42:47.964 | ana.marketing     | mensaje           | mensaje_id=37, customer_id=17, canal=EMAIL    | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           69 | 2026-11-11 20:42:47.966 | ana.marketing     | mensaje           | mensaje_id=38, customer_id=17, canal=WHATSAPP | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           70 | 2026-11-11 20:42:47.967 | ana.marketing     | mensaje           | mensaje_id=39, customer_id=18, canal=EMAIL    | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           71 | 2026-11-11 20:42:47.968 | ana.marketing     | mensaje           | mensaje_id=40, customer_id=18, canal=WHATSAPP | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           72 | 2026-11-11 20:42:47.970 | ana.marketing     | mensaje           | mensaje_id=41, customer_id=19, canal=EMAIL    | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           73 | 2026-11-11 20:42:47.971 | ana.marketing     | mensaje           | mensaje_id=42, customer_id=19, canal=WHATSAPP | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           74 | 2026-11-11 20:42:47.986 | postgres          | campana           | campana_id=4, codigo=HALLOWEEN-2026-FIELES    | CAMPANA_INSERT                                  |              | PREPARACION    | 
+           75 | 2026-11-11 20:42:47.992 | postgres          | campana_oferta    | campana_id=4, orden=1                         | CAMPANA_OFERTA_INSERT                           |              |                | 
+           76 | 2026-11-11 20:42:47.993 | postgres          | campana_oferta    | campana_id=4, orden=2                         | CAMPANA_OFERTA_INSERT                           |              |                | 
+           77 | 2026-11-11 20:42:48.000 | postgres          | campana_categoria | campana_id=4, category_id=11                  | CAMPANA_CATEGORIA_INSERT                        |              |                | 
+           78 | 2026-11-11 20:42:48.017 | marketing.config  | campana           | campana_id=4, codigo=HALLOWEEN-2026-FIELES    | CAMPANA_PREPARACION_A_HABILITADA                | PREPARACION  | HABILITADA     | 
+           79 | 2026-11-11 20:42:48.026 | ana.marketing     | mensaje           | mensaje_id=43, customer_id=12, canal=EMAIL    | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           80 | 2026-11-11 20:42:48.029 | ana.marketing     | mensaje           | mensaje_id=44, customer_id=18, canal=EMAIL    | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           81 | 2026-11-11 20:42:48.161 | sesion.A          | mensaje           | mensaje_id=45, customer_id=12, canal=EMAIL    | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           82 | 2026-11-11 20:42:48.164 | sesion.A          | mensaje           | mensaje_id=46, customer_id=12, canal=WHATSAPP | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           83 | 2026-11-11 20:42:48.167 | sesion.A          | mensaje           | mensaje_id=47, customer_id=13, canal=EMAIL    | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           84 | 2026-11-11 20:42:48.168 | sesion.A          | mensaje           | mensaje_id=48, customer_id=13, canal=WHATSAPP | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           85 | 2026-11-11 20:42:48.171 | sesion.A          | mensaje           | mensaje_id=49, customer_id=14, canal=EMAIL    | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           86 | 2026-11-11 20:42:48.172 | sesion.A          | mensaje           | mensaje_id=50, customer_id=14, canal=WHATSAPP | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           87 | 2026-11-11 20:42:54.230 | sesion.B          | mensaje           | mensaje_id=55, customer_id=15, canal=EMAIL    | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+           88 | 2026-11-11 20:42:54.232 | sesion.B          | mensaje           | mensaje_id=56, customer_id=15, canal=WHATSAPP | MENSAJE_CREADO                                  |              | PENDIENTE      | 
+
